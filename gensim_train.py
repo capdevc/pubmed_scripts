@@ -86,39 +86,38 @@ if __name__ == '__main__':
     for worker in workers:
         worker.start()
 
-    with open(csv_file) as csvfile:
-        print("Building vocab...\n")
-        for num, line in enumerate(csvfile):
-            iq.put(line)
-            if num % 1000 == 0:
-                sys.stdout.write("\rRecord: %d" % num)
-                sys.stdout.flush()
-
-        for i in xrange(processes):
-            iq.put(None)
-
-        for worker in workers:
-            worker.join()
-
-        oq.put(None)
-        Preprocessor.join()
-
     model = Doc2Vec(size=dimension, window=window,
                     min_count=min_count, workers=processes)
     model.build_vocab(sentences)
 
-    sentences = Sentences(oq)
-    workers = [Preprocessor(iq, oq) for i in xrange(processes)]
-    for worker in workers:
-        worker.start()
-
     with open(csv_file) as csvfile:
-        print("\nTraining...\n")
+        print("Building vocab...")
         for num, line in enumerate(csvfile):
             iq.put(line)
             if num % 1000 == 0:
                 sys.stdout.write("\rRecord: %d" % num)
                 sys.stdout.flush()
+
+	print("\n")
+
+        for worker in workers:
+            worker.join()
+
+        oq.put(None)
+
+
+
+    sentences = Sentences(oq)
+    model.train(sentences)
+    with open(csv_file) as csvfile:
+        print("\nTraining...")
+        for num, line in enumerate(csvfile):
+            iq.put(line)
+            if num % 1000 == 0:
+                sys.stdout.write("\rRecord: %d" % num)
+                sys.stdout.flush()
+
+	print("\n")
 
         for i in xrange(processes):
             iq.put(None)
@@ -127,7 +126,5 @@ if __name__ == '__main__':
             worker.join()
 
         oq.put(None)
-        Preprocessor.join()
 
-    model.train(sentences)
     model.save(model_file)
