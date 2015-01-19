@@ -24,7 +24,7 @@ class DocReader(object):
                 line = utils.to_unicode(line)
                 fields = line.strip().split("\t")
                 PMID = ["PMID" + fields[0]]
-                sentences = self.sent_tokenizer(fields[1].lower())
+                sentences = self.sent_tokenizer.tokenize(fields[0].lower())
                 for sent in sentences:
                     words = [self.stemmer.stem(w) for w
                              in self.re_tokenizer.tokenize(sent)]
@@ -58,4 +58,4 @@ if __name__ == '__main__':
                     min_count=min_count, workers=processes)
 
     model.save(model_file)
-    
+
