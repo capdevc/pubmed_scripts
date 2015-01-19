@@ -70,6 +70,8 @@ class Preprocessor(multiprocessing.Process):
     def process(self, line):
             line = utils.to_unicode(line)
             fields = line.strip().split("\t")
+            if len(fields) < 2:
+                return None
             PMID = ["PMID" + fields[0]]
             sentences = self.sent_tokenizer.tokenize(fields[1].lower())
             for sent in sentences:
