@@ -82,7 +82,6 @@ if __name__ == '__main__':
     oq = multiprocessing.Queue()
 
     sentences = Sentences(oq)
-    sentences.start()
     workers = [Preprocessor(iq, oq) for i in xrange(processes)]
     for worker in workers:
         worker.start()
@@ -109,7 +108,6 @@ if __name__ == '__main__':
     model.build_vocab(sentences)
 
     sentences = Sentences(oq)
-    sentences.start()
     workers = [Preprocessor(iq, oq) for i in xrange(processes)]
     for worker in workers:
         worker.start()
