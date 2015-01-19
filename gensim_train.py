@@ -10,10 +10,14 @@ from nltk.tokenize import RegexpTokenizer
 from nltk.tokenize.punkt import PunktSentenceTokenizer
 
 
-class Sentences(object):
-    """Yields LabeledSentences"""
-    def __init__(self, oq):
+class DocReader(multiprocessing.Process):
+    """read lines from file and queue"""
+    def __init__(self, iq, oq, processes, filename):
+        multiprocessing.Process.__init__(self)
+        self.iq = iq
         self.oq = oq
+        self.processes = processes
+        self.filename = filename
 
     def __iter__(self):
         while True:
@@ -21,6 +25,25 @@ class Sentences(object):
             if line is None:
                 break
             yield line
+        return
+
+    def run(self):
+        self.processors = [Preprocessor(self.iq, self.oq)
+                           for x in xrange(self.processes)]
+        for processor in self.processors:
+            processor.start()
+        with open(self.filename) as infile:
+            for num, line in enumerate(infile):
+                self.iq.put(line)
+                if num % 1000 == 0:
+                    sys.stdout.write("\rRecord: %d" % num)
+                    sys.stdout.flush()
+        for processor in self.processors:
+            self.iq.put(None)
+        for i, processor in enumerate(self.processors):
+            processor.join()
+
+        self.oq.put(None)
         return
 
 
@@ -48,7 +71,7 @@ class Preprocessor(multiprocessing.Process):
             line = utils.to_unicode(line)
             fields = line.strip().split("\t")
             PMID = ["PMID" + fields[0]]
-            sentences = self.sent_tokenizer.tokenize(fields[0].lower())
+            sentences = self.sent_tokenizer.tokenize(fields[1].lower())
             for sent in sentences:
                 words = [self.stemmer.stem(w) for w
                          in self.re_tokenizer.tokenize(sent)]
@@ -80,51 +103,18 @@ if __name__ == '__main__':
 
     iq = multiprocessing.Queue(1000)
     oq = multiprocessing.Queue()
-
-    sentences = Sentences(oq)
-    workers = [Preprocessor(iq, oq) for i in xrange(processes)]
-    for worker in workers:
-        worker.start()
-
     model = Doc2Vec(size=dimension, window=window,
                     min_count=min_count, workers=processes)
-    model.build_vocab(sentences)
 
-    with open(csv_file) as csvfile:
-        print("Building vocab...")
-        for num, line in enumerate(csvfile):
-            iq.put(line)
-            if num % 1000 == 0:
-                sys.stdout.write("\rRecord: %d" % num)
-                sys.stdout.flush()
+    print("Building vocab...")
+    dr = DocReader(iq, oq, processes, csv_file)
+    dr.start()
+    model = Doc2Vec(size=dimension, window=window,
+                    min_count=min_count, workers=processes)
+    model.build_vocab(dr)
 
-	print("\n")
-
-        for worker in workers:
-            worker.join()
-
-        oq.put(None)
-
-
-
-    sentences = Sentences(oq)
-    model.train(sentences)
-    with open(csv_file) as csvfile:
-        print("\nTraining...")
-        for num, line in enumerate(csvfile):
-            iq.put(line)
-            if num % 1000 == 0:
-                sys.stdout.write("\rRecord: %d" % num)
-                sys.stdout.flush()
-
-	print("\n")
-
-        for i in xrange(processes):
-            iq.put(None)
-
-        for worker in workers:
-            worker.join()
-
-        oq.put(None)
-
+    print("\nTraining...")
+    dr = DocReader(iq, oq, processes, csv_file)
+    dr.start()
+    model.train(dr)
     model.save(model_file)
